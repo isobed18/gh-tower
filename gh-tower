@@ -4,6 +4,11 @@
 # Usage:    gh tower <status|leases|claim|release|heartbeat|handoff|init> [args] [-R owner/repo]
 set -euo pipefail
 
+# Windows Git-Bash/MSYS rewrites arguments starting with "/" into Windows paths
+# ("/claim" -> "C:/Program Files/Git/claim"), corrupting protocol commands.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 STATE_BRANCH="${TOWER_STATE_BRANCH:-tower-state}"
 TEMPLATE_BASE="https://raw.githubusercontent.com/isobed18/gh-tower/main/templates"
 
