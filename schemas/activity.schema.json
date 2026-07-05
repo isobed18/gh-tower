@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/isobed18/gh-tower/schemas/activity.schema.json",
+  "title": "Tower activity file",
+  "type": "object",
+  "required": ["actors"],
+  "properties": {
+    "actors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type", "last_seen"],
+        "properties": {
+          "type": { "enum": ["human", "agent"] },
+          "last_seen": { "type": "string", "format": "date-time" },
+          "task": { "type": ["integer", "null"] },
+          "branch": { "type": ["string", "null"] },
+          "source": { "enum": ["heartbeat", "push", "comment", "review", "claim"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

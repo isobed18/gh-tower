@@ -1,0 +1,27 @@
+# gh-tower: conflict radar — overlap matrix on every PR, before merge.
+# Install at .github/workflows/tower-radar.yml
+name: tower-radar
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: radar-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  radar:
+    if: vars.TOWER_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4          # needed so radar can fetch the state branch
+        with:
+          fetch-depth: 1
+      - uses: isobed18/gh-tower/actions/radar@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

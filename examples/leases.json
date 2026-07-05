@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "leases": [
+    {
+      "id": "lease-7f3a",
+      "actor": "alice",
+      "actor_type": "human",
+      "task": 23,
+      "branch": "alice/23-negotiation-loop",
+      "paths": ["src/agent/negotiation.py", "src/agent/graph.py"],
+      "mode": "advisory",
+      "acquired_at": "2026-07-06T09:12:00Z",
+      "expires_at": "2026-07-06T13:12:00Z",
+      "renewals": 1
+    },
+    {
+      "id": "lease-c01d",
+      "actor": "codex-w1",
+      "actor_type": "agent",
+      "task": 31,
+      "branch": "codex/31-tariff-tool-tests",
+      "paths": ["tests/test_tariff.py"],
+      "mode": "advisory",
+      "acquired_at": "2026-07-06T11:02:00Z",
+      "expires_at": "2026-07-06T15:02:00Z",
+      "renewals": 0
+    }
+  ]
+}

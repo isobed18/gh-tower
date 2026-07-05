@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/isobed18/gh-tower/schemas/command.schema.json",
+  "title": "Tower repository_dispatch command payload",
+  "type": "object",
+  "required": ["command", "actor", "actor_type"],
+  "properties": {
+    "command": { "enum": ["claim", "heartbeat", "release", "handoff", "status", "ack"] },
+    "actor": { "type": "string", "minLength": 1 },
+    "actor_type": { "enum": ["human", "agent"] },
+    "task": { "type": "integer" },
+    "branch": { "type": "string" },
+    "paths": { "type": "array", "items": { "type": "string" } },
+    "note": { "type": "string" },
+    "target": { "type": "string", "description": "handoff target actor" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/isobed18/gh-tower/schemas/envelope.schema.json",
+  "title": "Diagnostic envelope machine payload (tower:envelope:v1)",
+  "type": "object",
+  "required": ["run", "attempt", "max", "verdict"],
+  "properties": {
+    "run": { "type": "integer" },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "max": { "type": "integer", "minimum": 1 },
+    "verdict": { "enum": ["fail"] },
+    "stage": { "type": "string" },
+    "failed_jobs": { "type": "array", "items": { "type": "string" } },
+    "suspect_paths": { "type": "array", "items": { "type": "string" } },
+    "suspect_prs": { "type": "array", "items": { "type": "integer" } }
+  },
+  "additionalProperties": true
+}

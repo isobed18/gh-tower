@@ -1,0 +1,34 @@
+name: "tower-coordinator"
+description: "Single writer of the tower-state ledger: parses /commands and dispatch events, maintains leases/activity, renders STATUS.md"
+inputs:
+  github-token:
+    description: "Token with contents:write, issues:write"
+    required: true
+  state-branch:
+    description: "Orphan branch holding the ledger"
+    default: "tower-state"
+  lease-ttl-minutes:
+    description: "Advisory lease lifetime in minutes"
+    default: "240"
+  human-stale-minutes:
+    description: "Reaper reclaim threshold for humans"
+    default: "1440"
+  agent-stale-minutes:
+    description: "Reaper reclaim threshold for agents"
+    default: "120"
+  mode:
+    description: "'command' (issue_comment / repository_dispatch) or 'reap' (cron)"
+    default: "command"
+runs:
+  using: "composite"
+  steps:
+    - name: Coordinate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        STATE_BRANCH: ${{ inputs.state-branch }}
+        LEASE_TTL_MIN: ${{ inputs.lease-ttl-minutes }}
+        HUMAN_STALE_MIN: ${{ inputs.human-stale-minutes }}
+        AGENT_STALE_MIN: ${{ inputs.agent-stale-minutes }}
+        MODE: ${{ inputs.mode }}
+      run: bash "${{ github.action_path }}/coordinator.sh"

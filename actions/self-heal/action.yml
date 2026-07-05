@@ -1,0 +1,26 @@
+name: "tower-self-heal"
+description: "On red CI: post a Diagnostic Envelope on the PR and route the fix (agent mention or human), with a bounded retry budget"
+inputs:
+  github-token:
+    description: "Token with issues:write, pull-requests:write, actions:read"
+    required: true
+  agent-branch-prefixes:
+    description: "Comma-separated branch prefixes that identify agent PRs"
+    default: "codex/,claude/,agent/,copilot/"
+  fix-mention:
+    description: "Mention used to summon a fixer on agent PRs (e.g. @codex, @claude)"
+    default: "@codex"
+  max-heal-attempts:
+    description: "Envelope budget per PR before needs-human"
+    default: "3"
+runs:
+  using: "composite"
+  steps:
+    - name: Self-heal
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        AGENT_PREFIXES: ${{ inputs.agent-branch-prefixes }}
+        FIX_MENTION: ${{ inputs.fix-mention }}
+        MAX_ATTEMPTS: ${{ inputs.max-heal-attempts }}
+      run: bash "${{ github.action_path }}/selfheal.sh"

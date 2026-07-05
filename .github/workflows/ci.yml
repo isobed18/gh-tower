@@ -1,0 +1,53 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck all scripts
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+          find actions -name '*.sh' -print0 | xargs -0 shellcheck -S warning
+
+  schemas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: validate examples against schemas
+        run: |
+          pip install -q jsonschema
+          python - <<'EOF'
+          import json, sys
+          from jsonschema import validate
+          pairs = [
+              ("schemas/lease.schema.json", "examples/leases.json"),
+              ("schemas/activity.schema.json", "examples/activity.json"),
+          ]
+          for schema_path, example_path in pairs:
+              with open(schema_path) as s, open(example_path) as e:
+                  validate(json.load(e), json.load(s))
+              print(f"OK  {example_path} ⊨ {schema_path}")
+          # standalone schemas must at least parse
+          for p in ("schemas/envelope.schema.json", "schemas/command.schema.json"):
+              json.load(open(p)); print(f"OK  {p} parses")
+          EOF
+
+  workflows-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: yamllint templates and actions
+        run: |
+          pip install -q yamllint
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" templates/ actions/ .github/workflows/

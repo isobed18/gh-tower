@@ -1,0 +1,18 @@
+name: "tower-radar"
+description: "Conflict radar: intersects this PR's diff with active leases and every other open PR; upserts one sticky comment"
+inputs:
+  github-token:
+    description: "Token with pull-requests:write, issues:write, contents:read"
+    required: true
+  state-branch:
+    description: "Ledger branch"
+    default: "tower-state"
+runs:
+  using: "composite"
+  steps:
+    - name: Radar
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        STATE_BRANCH: ${{ inputs.state-branch }}
+      run: bash "${{ github.action_path }}/radar.sh"

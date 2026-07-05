@@ -1,0 +1,18 @@
+{
+  "actors": {
+    "alice": {
+      "type": "human",
+      "last_seen": "2026-07-06T11:40:12Z",
+      "task": 23,
+      "branch": "alice/23-negotiation-loop",
+      "source": "push"
+    },
+    "codex-w1": {
+      "type": "agent",
+      "last_seen": "2026-07-06T11:43:02Z",
+      "task": 31,
+      "branch": "codex/31-tariff-tool-tests",
+      "source": "heartbeat"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/isobed18/gh-tower/schemas/lease.schema.json",
+  "title": "Tower leases file",
+  "type": "object",
+  "required": ["version", "leases"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "leases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "actor", "actor_type", "task", "paths", "mode", "acquired_at", "expires_at"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^lease-[a-f0-9]{4,}$" },
+          "actor": { "type": "string", "minLength": 1 },
+          "actor_type": { "enum": ["human", "agent"] },
+          "task": { "type": "integer", "minimum": 1 },
+          "branch": { "type": "string" },
+          "paths": { "type": "array", "items": { "type": "string" }, "minItems": 0 },
+          "mode": { "enum": ["advisory", "exclusive"] },
+          "acquired_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "renewals": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

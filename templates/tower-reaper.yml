@@ -1,0 +1,27 @@
+# gh-tower: reaper — expires leases, reclaims tasks from silent actors.
+# Install at .github/workflows/tower-reaper.yml
+name: tower-reaper
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: tower           # same lane as the coordinator — single writer preserved
+  cancel-in-progress: false
+
+jobs:
+  reap:
+    if: vars.TOWER_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: isobed18/gh-tower/actions/coordinator@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: reap
+          # agent-stale-minutes: "120"
+          # human-stale-minutes: "1440"
