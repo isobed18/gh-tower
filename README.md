@@ -93,6 +93,16 @@ adopting, compare two weeks after.
 | code-conductor | Label-based issue claiming CLI | Claiming only; no leases/heartbeats/overlap detection. |
 | swarm-protocol | MCP server for claims/handoffs | Requires an MCP session; gh-tower is vendor-neutral — anything that can call the GitHub API participates. |
 
+## Known limitations (v0.1 — honest list)
+
+- **Command bursts can drop a run.** The coordinator's `concurrency: tower` group keeps one
+  running + one pending run; a third command arriving within the same seconds is cancelled by
+  GitHub. Dropped heartbeats are benign; a dropped `/claim` simply gets no confirmation — retry it.
+  Roadmap: a reconciliation sweep in the reaper that reprocesses unanswered commands.
+- **Radar is file-level**, not hunk-level. Two PRs touching different parts of one file still grade 🔴.
+- **No Projects v2 card moves yet** — `/claim` assigns the issue but doesn't move board cards.
+- **Actions referenced `@main`** in templates until the protocol stabilizes; pin a tag for production use.
+
 ## Repository layout
 
 ```
