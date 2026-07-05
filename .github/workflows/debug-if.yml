@@ -1,0 +1,23 @@
+name: debug-if
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: evaluate sub-expressions
+        env:
+          E_ENABLED: ${{ vars.TOWER_ENABLED != 'false' }}
+          E_STARTS: ${{ startsWith(github.event.comment.body, '/') }}
+          E_NAME: ${{ github.event_name }}
+          E_BODY: ${{ github.event.comment.body }}
+          E_FULL: ${{ vars.TOWER_ENABLED != 'false' && (github.event_name == 'repository_dispatch' || startsWith(github.event.comment.body, '/')) }}
+        run: |
+          echo "enabled=$E_ENABLED"
+          echo "starts=$E_STARTS"
+          echo "name=$E_NAME"
+          echo "body=$E_BODY"
+          echo "full=$E_FULL"
