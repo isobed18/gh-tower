@@ -62,3 +62,5 @@ flowchart TB
 | Agent fix ping-pong | envelope attempt counter | retry budget → `needs-human`. |
 | State branch race | impossible by design | single writer + concurrency group; push uses rebase-retry as belt-and-braces. |
 | GitHub outage | — | nothing to do; the repo itself is down. No extra availability liability was added. |
+
+# radar-test-b
