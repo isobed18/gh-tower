@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "leases": [
-    {
-      "id": "lease-68c2c2b2",
-      "actor": "isobed18",
-      "actor_type": "human",
-      "task": 4,
-      "branch": "isobed18/4-add-contributing-md-with-proto",
-      "paths": [
-        "CONTRIBUTING.md"
-      ],
-      "mode": "advisory",
-      "acquired_at": "2026-07-05T11:41:54Z",
-      "expires_at": "2026-07-05T15:41:56Z",
-      "renewals": 0
-    }
-  ]
+  "leases": []
 }
