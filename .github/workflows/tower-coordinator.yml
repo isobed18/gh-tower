@@ -1,0 +1,32 @@
+# gh-tower: coordinator — the single writer of the tower-state ledger.
+# Install at .github/workflows/tower-coordinator.yml
+name: tower-coordinator
+on:
+  issue_comment:
+    types: [created]
+  repository_dispatch:
+    types: [tower]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+# THE load-bearing line: all coordinator/reaper runs share one FIFO lane.
+concurrency:
+  group: tower
+  cancel-in-progress: false
+
+jobs:
+  coordinate:
+    if: >
+      vars.TOWER_ENABLED != 'false' &&
+      (github.event_name == 'repository_dispatch' ||
+       startsWith(github.event.comment.body, '/'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: isobed18/gh-tower/actions/coordinator@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # state-branch: tower-state
+          # lease-ttl-minutes: "240"

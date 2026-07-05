@@ -43,20 +43,36 @@ Design rules that make it safe:
 ## Quickstart (adopting repo)
 
 ```bash
-# 1. copy the caller workflows into your repo
-curl -fsSL https://raw.githubusercontent.com/isobed18/gh-tower/main/templates/tower-coordinator.yml -o .github/workflows/tower-coordinator.yml
-curl -fsSL https://raw.githubusercontent.com/isobed18/gh-tower/main/templates/tower-radar.yml       -o .github/workflows/tower-radar.yml
-curl -fsSL https://raw.githubusercontent.com/isobed18/gh-tower/main/templates/tower-reaper.yml      -o .github/workflows/tower-reaper.yml
-curl -fsSL https://raw.githubusercontent.com/isobed18/gh-tower/main/templates/tower-self-heal.yml   -o .github/workflows/tower-self-heal.yml
+gh extension install isobed18/gh-tower   # this repo is also a gh CLI extension
+cd your-repo
+gh tower init                            # installs the 4 workflows + labels
+git add .github && git commit -m "adopt gh-tower" && git push
+```
 
-# 2. create the labels tower uses
-gh label create overlap:high --color D93F0B --description "PR collides with in-flight work"
-gh label create needs-human  --color B60205 --description "self-heal budget exhausted"
+Then, from anywhere:
 
-# 3. done. Comment /claim on any issue.
+```bash
+gh tower status          # who is doing what (renders STATUS.md)
+gh tower claim 42        # claim issue #42 (typed command — no hand-written comments)
+gh tower heartbeat 42
+gh tower release 42 "auth middleware done, tests missing"
 ```
 
 Full setup (Projects v2 board, merge queue, agent onboarding): [docs/INSTALL.md](docs/INSTALL.md).
+
+## Dashboard
+
+[`dashboard/index.html`](dashboard/index.html) is a zero-backend live view of any tower-enabled repo —
+actors with liveness dots, leases with expiry, open PRs with overlap labels. It reads the
+`tower-state` branch via `raw.githubusercontent.com` and the public GitHub API client-side;
+host it on GitHub Pages or open it locally: `dashboard/index.html?repo=owner/name`.
+
+## Measuring success
+
+The problem definition and 10 success metrics (red-main rate, overlap caught early, human
+wait time, self-heal success rate, …) live in [docs/METRICS.md](docs/METRICS.md) — all
+computable from the GitHub API plus the state branch's git history. Baseline a week before
+adopting, compare two weeks after.
 
 ## Commands
 

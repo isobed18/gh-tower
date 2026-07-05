@@ -26,12 +26,12 @@ flowchart TB
         MQ["Merge queue (recommended)"]
     end
 
-    H & A1 -->|/claim /heartbeat /release| CMD --> COORD --> LEDGER
+    H & A1 -->|"/claim /heartbeat /release"| CMD --> COORD --> LEDGER
     REAPER --> COORD
-    H & A1 -->|read before editing| LEDGER
+    H & A1 -->|"read before editing"| LEDGER
     ISS --> PR --> RADAR
     PR --> CI --> MQ
-    CI -->|failure| HEAL -->|@agent fix| PR
+    CI -->|"failure"| HEAL -->|"@agent fix"| PR
     COND --> ISS
 ```
 

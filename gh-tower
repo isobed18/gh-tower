@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# gh-tower — gh CLI extension: typed interface to the TOWER protocol.
+# Install:  gh extension install isobed18/gh-tower
+# Usage:    gh tower <status|leases|claim|release|heartbeat|handoff|init> [args] [-R owner/repo]
+set -euo pipefail
+
+STATE_BRANCH="${TOWER_STATE_BRANCH:-tower-state}"
+TEMPLATE_BASE="https://raw.githubusercontent.com/isobed18/gh-tower/main/templates"
+
+usage() {
+  cat <<'EOF'
+gh tower — coordinate humans + AI agents on one repository
+
+USAGE
+  gh tower status                     show STATUS.md (who is doing what)
+  gh tower leases                     show active leases (JSON)
+  gh tower claim <issue> [paths...]   claim a task (comment /claim on the issue)
+  gh tower release <issue> [note]     release a task with a context note
+  gh tower heartbeat <issue> [note]   renew your lease / signal liveness
+  gh tower handoff <issue> <@actor>   hand a task to someone specific
+  gh tower init                       install tower workflows + labels into the current repo
+  -R owner/repo                       target repository (default: current)
+EOF
+}
+
+# ---- parse -R flag anywhere in args
+REPO_ARGS=()
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -R) REPO_ARGS=(-R "$2"); shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+set -- "${ARGS[@]:-}"
+
+repo() { gh repo view "${REPO_ARGS[@]:1}" --json nameWithOwner --jq .nameWithOwner; }
+
+comment_cmd() { # comment_cmd <issue> <body>
+  gh issue comment "$1" "${REPO_ARGS[@]}" --body "$2" >/dev/null
+  echo "🗼 sent: $(echo "$2" | head -n1)  →  issue #$1 (coordinator will confirm in a comment)"
+}
+
+case "${1:-}" in
+  status)
+    R="$(repo)"
+    gh api "repos/${R}/contents/STATUS.md?ref=${STATE_BRANCH}" --jq .content 2>/dev/null \
+      | base64 -d || echo "🗼 no STATUS.md yet — has the coordinator run once? (branch: ${STATE_BRANCH})"
+    ;;
+  leases)
+    R="$(repo)"
+    gh api "repos/${R}/contents/state/leases.json?ref=${STATE_BRANCH}" --jq .content 2>/dev/null \
+      | base64 -d | jq . || echo '{"version":1,"leases":[]}'
+    ;;
+  claim)
+    [ -n "${2:-}" ] || { usage; exit 1; }
+    ISSUE="$2"; shift 2
+    BODY="/claim${*:+ $*}"
+    comment_cmd "$ISSUE" "$BODY"
+    ;;
+  release)
+    [ -n "${2:-}" ] || { usage; exit 1; }
+    ISSUE="$2"; shift 2
+    comment_cmd "$ISSUE" "/release${*:+ $*}"
+    ;;
+  heartbeat)
+    [ -n "${2:-}" ] || { usage; exit 1; }
+    ISSUE="$2"; shift 2
+    comment_cmd "$ISSUE" "/heartbeat${*:+ $*}"
+    ;;
+  handoff)
+    [ -n "${2:-}" ] && [ -n "${3:-}" ] || { usage; exit 1; }
+    comment_cmd "$2" "/handoff $3"
+    ;;
+  init)
+    mkdir -p .github/workflows
+    for f in tower-coordinator tower-radar tower-reaper tower-self-heal; do
+      curl -fsSL "${TEMPLATE_BASE}/${f}.yml" -o ".github/workflows/${f}.yml"
+      echo "🗼 installed .github/workflows/${f}.yml"
+    done
+    gh label create overlap:high --color D93F0B --description "PR collides with in-flight work" 2>/dev/null || true
+    gh label create needs-human  --color B60205 --description "self-heal budget exhausted" 2>/dev/null || true
+    gh label create protocol-violation --color FBCA04 --description "edited without a claim/lease" 2>/dev/null || true
+    echo "🗼 labels ensured. Review .github/workflows/tower-self-heal.yml → set your CI workflow name, then commit."
+    ;;
+  *) usage; exit 1 ;;
+esac

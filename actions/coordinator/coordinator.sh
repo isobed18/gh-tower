@@ -80,11 +80,16 @@ comment() { # comment <issue#> <body>
 
 expiry() { date -u -d "+${LEASE_TTL_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ; }
 
+paths_to_json() { # stdin: comma-separated paths -> compact JSON array (safe on empty input)
+  tr -d '\r' | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | awk 'NF' \
+    | jq -R . | jq -sc .
+}
+
 issue_paths() { # extract "Paths: a, b" line from issue body
-  gh api "repos/${REPO}/issues/$1" --jq '.body // ""' \
-    | grep -im1 '^paths:' | sed 's/^[Pp]aths:[[:space:]]*//' | tr ',' '\n' \
-    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' \
-    | jq -R . | jq -sc . || echo '[]'
+  local line
+  line="$(gh api "repos/${REPO}/issues/$1" --jq '.body // ""' | grep -im1 '^paths:' || true)"
+  [ -z "$line" ] && { echo '[]'; return; }
+  echo "$line" | sed 's/^[Pp]aths:[[:space:]]*//' | paths_to_json
 }
 
 touch_activity() { # touch_activity <actor> <type> <task|null> <branch|null> <source>
@@ -160,6 +165,7 @@ cmd_heartbeat() { # <actor> <type> <issue|null>
 }
 
 cmd_status() { # <issue>
+  render_status
   comment "$1" "$(cat STATUS.md)"
 }
 
@@ -210,7 +216,7 @@ if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
   ARGS="$(echo "$FIRST" | cut -s -d' ' -f2-)"
   case "$VERB" in
     /claim)
-      PATHS="$(echo "$ARGS" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -v '^$' | jq -R . | jq -sc .)"
+      PATHS="$(echo "$ARGS" | paths_to_json)"
       [ "$PATHS" = "[]" ] && PATHS="$(issue_paths "$ISSUE")"
       cmd_claim "$ACTOR" "$TYPE" "$ISSUE" "$PATHS" ;;
     /release)  cmd_release "$ACTOR" "$ISSUE" "$ARGS" ;;
@@ -224,10 +230,17 @@ if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
   esac
   commit_state "${VERB#/} by ${ACTOR} on #${ISSUE}"
 elif [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
+  # strictness: reject payloads that don't match schemas/command.schema.json shape
+  jq -e '.client_payload
+         | (.command | type == "string" and IN("claim","heartbeat","release","handoff","status","ack"))
+           and (.actor | type == "string" and length > 0)
+           and ((.task // 0) | type == "number")' "$EVENT" >/dev/null \
+    || { echo "::error::tower: dispatch payload failed schema check — rejected"; exit 1; }
   CMD="$(jq -r '.client_payload.command' "$EVENT")"
   ACTOR="$(jq -r '.client_payload.actor' "$EVENT")"
   TYPE="$(jq -r '.client_payload.actor_type // "agent"' "$EVENT")"
   TASK="$(jq -r '.client_payload.task // "null"' "$EVENT")"
+  SENDER="$(jq -r '.sender.login // "unknown"' "$EVENT")"  # authenticated identity behind the payload
   case "$CMD" in
     heartbeat) cmd_heartbeat "$ACTOR" "$TYPE" "$TASK" ;;
     claim)
@@ -236,5 +249,5 @@ elif [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
     release)   cmd_release "$ACTOR" "$TASK" "$(jq -r '.client_payload.note // ""' "$EVENT")" ;;
     *) log "unknown dispatch command: $CMD"; exit 0 ;;
   esac
-  commit_state "${CMD} (dispatch) by ${ACTOR}"
+  commit_state "${CMD} (dispatch) by ${ACTOR} via ${SENDER}"
 fi

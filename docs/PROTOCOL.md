@@ -139,7 +139,37 @@ All machine-parseable data rides in versioned HTML comments inside otherwise hum
 - Unknown versions/tags MUST be treated as read-only by agents.
 - Sticky comments are found by tag prefix and edited in place (one radar comment per PR, ever).
 
-## 10. Conformance levels
+## 10. Strictness & trust model
+
+A common misreading: *"the agents communicate through .md files."* They don't. The canonical
+substrate is **schema-validated JSON**; markdown is only ever a human-readable *projection* of it:
+
+| Artifact | Canonical form | Markdown role |
+|---|---|---|
+| Ledger | `state/*.json`, validated against `schemas/*.schema.json` | `STATUS.md` is a rendering, regenerated on every write — never read by machines |
+| Commands | `/verb args` grammar (comments) or `command.schema.json` payloads (dispatch) | free text after line 1 is for humans only |
+| Radar / envelopes / negotiation | versioned JSON in `<!-- tower:*:v1 {...} -->` | the visible comment is generated *from* the JSON |
+
+Enforcement points, from weakest to strongest:
+
+1. **Write-time validation.** The coordinator rejects dispatch payloads that fail the command
+   schema shape before touching state; CI validates state examples against the schemas.
+2. **Authenticated identity.** Comment commands inherit the commenter's GitHub identity — it
+   cannot be spoofed. Dispatch payloads carry a self-declared `actor` (needed so one bot token
+   can host several logical agents, e.g. `codex-w1`, `codex-w2`), but the coordinator records the
+   authenticated `sender` login in the state-branch commit message, so impersonation is
+   always attributable in the audit log.
+3. **Typed interfaces instead of free text.** Humans and scripts should use the `gh tower`
+   CLI extension (this repo doubles as one: `gh extension install isobed18/gh-tower`), which
+   emits well-formed commands. Roadmap: an **MCP server** exposing `tower_claim`,
+   `tower_heartbeat`, `tower_release`, `tower_status` as typed tools — then agents never
+   compose comment strings at all, and schema violations become tool-call errors at the
+   agent boundary.
+4. **Conformance suite (roadmap).** A test harness that replays a scripted actor against a
+   sandbox repo and asserts ledger transitions — used to certify an agent integration at a
+   given conformance level before it is allowed to hold leases.
+
+## 11. Conformance levels
 
 | Level | Requirement |
 |---|---|

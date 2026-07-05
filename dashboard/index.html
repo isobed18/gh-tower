@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gh-tower dashboard</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --dim:#8b949e;
+          --green:#3fb950; --yellow:#d29922; --red:#f85149; --accent:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:14px; color:var(--dim); margin:24px 0 8px;
+       text-transform:uppercase; letter-spacing:.08em; }
+  .sub { color:var(--dim); margin-bottom:16px; }
+  .bar { display:flex; gap:8px; margin:16px 0 8px; }
+  input { background:var(--panel); border:1px solid var(--border); color:var(--fg);
+          padding:8px 12px; border-radius:6px; width:320px; font:inherit; }
+  button { background:#238636; border:1px solid #2ea043; color:#fff; padding:8px 16px;
+           border-radius:6px; cursor:pointer; font:inherit; }
+  table { width:100%; border-collapse:collapse; background:var(--panel);
+          border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); }
+  th { color:var(--dim); font-weight:600; } tr:last-child td { border-bottom:none; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+  .ok{background:var(--green)} .warn{background:var(--yellow)} .bad{background:var(--red)}
+  .tag { padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--border); }
+  .agent{color:var(--accent)} .human{color:var(--green)}
+  a { color:var(--accent); text-decoration:none; } a:hover{text-decoration:underline;}
+  .empty { color:var(--dim); padding:12px; }
+  #err { color:var(--red); margin:8px 0; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<h1>🗼 gh-tower</h1>
+<div class="sub">live coordination state — read straight from the <code>tower-state</code> branch and the public GitHub API. No backend.</div>
+<div class="bar">
+  <input id="repo" placeholder="owner/repo" value="">
+  <button onclick="load()">load</button>
+</div>
+<div id="err"></div>
+
+<h2>Actors</h2><div id="actors"><div class="empty">—</div></div>
+<h2>Active leases</h2><div id="leases"><div class="empty">—</div></div>
+<h2>Open pull requests</h2><div id="prs"><div class="empty">—</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+$('repo').value = params.get('repo') || 'isobed18/gh-tower';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function ago(iso) {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return m + 'm ago';
+  if (m < 1440) return Math.round(m/60) + 'h ago';
+  return Math.round(m/1440) + 'd ago';
+}
+function liveness(iso, type) {
+  const m = (Date.now() - new Date(iso)) / 60000;
+  const limit = type === 'agent' ? 120 : 1440;
+  return m < 30 ? 'ok' : (m < limit ? 'warn' : 'bad');
+}
+async function fetchState(repo, path) {
+  const r = await fetch(`https://raw.githubusercontent.com/${repo}/tower-state/${path}?cb=${Date.now()}`);
+  if (!r.ok) throw new Error(`${path}: ${r.status} (no tower-state branch yet?)`);
+  return r.json();
+}
+function table(headers, rows) {
+  if (!rows.length) return '<div class="empty">none</div>';
+  return `<table><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr>` +
+    rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('') + '</table>';
+}
+async function load() {
+  $('err').textContent = '';
+  const repo = $('repo').value.trim();
+  history.replaceState(null, '', `?repo=${encodeURIComponent(repo)}`);
+  try {
+    const [activity, leases] = await Promise.all([
+      fetchState(repo, 'state/activity.json'),
+      fetchState(repo, 'state/leases.json'),
+    ]);
+    $('actors').innerHTML = table(
+      ['', 'actor', 'type', 'last seen', 'task', 'branch'],
+      Object.entries(activity.actors || {}).map(([name, a]) => [
+        `<span class="dot ${liveness(a.last_seen, a.type)}"></span>`,
+        esc(name), `<span class="tag ${esc(a.type)}">${esc(a.type)}</span>`,
+        ago(a.last_seen),
+        a.task ? `<a href="https://github.com/${repo}/issues/${a.task}">#${a.task}</a>` : '—',
+        a.branch ? `<code>${esc(a.branch)}</code>` : '—',
+      ]));
+    $('leases').innerHTML = table(
+      ['actor', 'task', 'mode', 'paths', 'expires'],
+      (leases.leases || []).map(l => [
+        esc(l.actor),
+        `<a href="https://github.com/${repo}/issues/${l.task}">#${l.task}</a>`,
+        `<span class="tag">${esc(l.mode)}</span>`,
+        (l.paths||[]).map(p=>`<code>${esc(p)}</code>`).join(' ') || '—',
+        new Date(l.expires_at) < new Date()
+          ? '<span class="tag" style="color:var(--red)">expired</span>' : ago(l.expires_at).replace(' ago',''),
+      ]));
+  } catch (e) { $('err').textContent = '⚠ ' + e.message; }
+  try {
+    const prs = await (await fetch(`https://api.github.com/repos/${repo}/pulls?state=open&per_page=30`)).json();
+    $('prs').innerHTML = table(
+      ['PR', 'title', 'author', 'branch', 'labels'],
+      (Array.isArray(prs) ? prs : []).map(p => [
+        `<a href="${p.html_url}">#${p.number}</a>`, esc(p.title),
+        esc(p.user.login), `<code>${esc(p.head.ref)}</code>`,
+        p.labels.map(l => `<span class="tag" style="border-color:#${l.color}">${esc(l.name)}</span>`).join(' ') || '—',
+      ]));
+  } catch (e) { $('err').textContent += '\n⚠ PRs: ' + e.message; }
+}
+load();
+</script>
+</body>
+</html>
