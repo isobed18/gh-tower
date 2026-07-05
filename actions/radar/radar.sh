@@ -8,8 +8,9 @@ REPO="${GITHUB_REPOSITORY}"
 PR="$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")"
 MARKER="tower:radar:v1"
 
-# ---- my changed files
+# ---- my changed files + author (own leases are not conflicts)
 MY_FILES="$(gh pr view "$PR" --repo "$REPO" --json files --jq '.files[].path')"
+AUTHOR="$(gh pr view "$PR" --repo "$REPO" --json author --jq '.author.login')"
 [ -z "$MY_FILES" ] && { echo "::notice::radar: empty diff"; exit 0; }
 
 # ---- leases from the state branch (best effort)
@@ -28,8 +29,8 @@ HIGH=0
 while IFS= read -r f; do
   prs="$(echo "$OTHERS" | jq -r --arg f "$f" \
         '[.[] | select(.files[].path == $f) | "#\(.number) (\(.author.login))"] | unique | join(", ")')"
-  lease_hits="$(echo "$LEASES" | jq -r --arg f "$f" \
-        '[.leases[] | select(.paths[]? == $f) | "\(.actor) lease→#\(.task)"] | unique | join(", ")')"
+  lease_hits="$(echo "$LEASES" | jq -r --arg f "$f" --arg me "$AUTHOR" \
+        '[.leases[] | select(.actor != $me) | select(.paths[]? == $f) | "\(.actor) lease→#\(.task)"] | unique | join(", ")')"
   risk="🟢"
   [ -n "$lease_hits" ] && risk="🟡"
   [ -n "$prs" ] && { risk="🔴"; HIGH=1; }
