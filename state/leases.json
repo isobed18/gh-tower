@@ -1,20 +1,4 @@
 {
   "version": 1,
-  "leases": [
-    {
-      "id": "lease-6828b444",
-      "actor": "isobed18",
-      "actor_type": "human",
-      "task": 1,
-      "branch": "isobed18/1-dogfood-verify-claim-heartbeat",
-      "paths": [
-        "actions/coordinator/coordinator.sh",
-        "docs/PROTOCOL.md"
-      ],
-      "mode": "advisory",
-      "acquired_at": "2026-07-05T11:39:37Z",
-      "expires_at": "2026-07-05T15:39:39Z",
-      "renewals": 0
-    }
-  ]
+  "leases": []
 }

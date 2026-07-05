@@ -2,9 +2,9 @@
   "actors": {
     "isobed18": {
       "type": "human",
-      "last_seen": "2026-07-05T11:39:37Z",
-      "task": 1,
-      "branch": "isobed18/1-dogfood-verify-claim-heartbeat",
+      "last_seen": "2026-07-05T11:41:14Z",
+      "task": null,
+      "branch": null,
       "source": "claim"
     }
   }
