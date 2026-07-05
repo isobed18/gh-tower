@@ -19,10 +19,7 @@ concurrency:
 
 jobs:
   coordinate:
-    if: >
-      vars.TOWER_ENABLED != 'false' &&
-      (github.event_name == 'repository_dispatch' ||
-       startsWith(github.event.comment.body, '/'))
+    if: vars.TOWER_ENABLED != 'false' && (github.event_name == 'repository_dispatch' || startsWith(github.event.comment.body, '/'))
     runs-on: ubuntu-latest
     steps:
       - uses: isobed18/gh-tower/actions/coordinator@main

@@ -15,9 +15,7 @@ permissions:
 
 jobs:
   heal:
-    if: >
-      vars.TOWER_ENABLED != 'false' &&
-      github.event.workflow_run.conclusion == 'failure'
+    if: vars.TOWER_ENABLED != 'false' && github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: isobed18/gh-tower/actions/self-heal@main
