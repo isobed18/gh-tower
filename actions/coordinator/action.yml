@@ -17,8 +17,20 @@ inputs:
     description: "Reaper reclaim threshold for agents"
     default: "120"
   mode:
-    description: "'command' (issue_comment / repository_dispatch) or 'reap' (cron)"
+    description: "'command' (issue_comment / repository_dispatch) or 'reap' (cron: reap + sweep)"
     default: "command"
+  sweep-window-minutes:
+    description: "How far back the sweeper replays unacknowledged commands"
+    default: "360"
+  project-number:
+    description: "EXPERIMENTAL: Projects v2 number for board card moves on claim/release"
+    default: ""
+  project-owner:
+    description: "EXPERIMENTAL: Projects v2 owner (defaults to repo owner)"
+    default: ""
+  project-token:
+    description: "EXPERIMENTAL: PAT/App token with `project` scope (GITHUB_TOKEN cannot access Projects v2)"
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -31,4 +43,8 @@ runs:
         HUMAN_STALE_MIN: ${{ inputs.human-stale-minutes }}
         AGENT_STALE_MIN: ${{ inputs.agent-stale-minutes }}
         MODE: ${{ inputs.mode }}
+        SWEEP_WINDOW_MIN: ${{ inputs.sweep-window-minutes }}
+        PROJECT_NUMBER: ${{ inputs.project-number }}
+        PROJECT_OWNER: ${{ inputs.project-owner }}
+        PROJECT_TOKEN: ${{ inputs.project-token }}
       run: bash "${{ github.action_path }}/coordinator.sh"

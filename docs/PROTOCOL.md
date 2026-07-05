@@ -67,6 +67,12 @@ Commands are issue/PR comments parsed by the coordinator. Grammar: `/verb [args.
 | `/status` | Coordinator replies with the current STATUS.md content. |
 | `/ack <ruling>` | Acknowledge a negotiation ruling (§6). |
 
+**Acknowledgement semantics:** the coordinator adds a 👀 reaction to every command comment it
+processes. A command without 👀 after ~1 minute was dropped (GitHub's concurrency queue keeps
+only one pending run under burst) — the reaper's **sweeper** replays unacknowledged commands
+from the last 6 h in comment order on its next cycle, so dropped commands self-heal within
+one reaper interval. Commands are idempotent; replay converges.
+
 Equivalent event form (for agents that prefer API over comments):
 
 ```

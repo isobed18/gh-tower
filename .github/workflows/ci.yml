@@ -65,3 +65,24 @@ jobs:
           bash -n gh-tower
           test -x gh-tower || chmod +x gh-tower
           ./gh-tower --help | grep -q "gh tower"
+
+  mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: MCP server registers all tools
+        run: |
+          pip install -q "mcp[cli]"
+          python - <<'EOF'
+          import sys, asyncio
+          sys.path.insert(0, "mcp")
+          import server
+          names = {t.name for t in asyncio.run(server.mcp.list_tools())}
+          expected = {"tower_status", "tower_leases", "tower_claim",
+                      "tower_heartbeat", "tower_release", "tower_handoff"}
+          assert expected <= names, f"missing tools: {expected - names}"
+          print("OK", sorted(names))
+          EOF

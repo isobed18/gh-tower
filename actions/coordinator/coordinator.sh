@@ -2,6 +2,10 @@
 # tower coordinator — the ONLY writer of the state branch.
 # Serialization is guaranteed by the caller workflow's `concurrency: tower` group;
 # the push-retry below is belt-and-braces only.
+#
+# Processed-command protocol: every comment command the coordinator handles gets an
+# 👀 reaction. The reap-mode SWEEPER replays recent commands lacking that reaction —
+# this heals commands dropped by GitHub's one-pending-run concurrency limit.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY}"
@@ -78,6 +82,11 @@ comment() { # comment <issue#> <body>
   gh api "repos/${REPO}/issues/$1/comments" -f body="$2" --silent
 }
 
+react() { # react <comment_id> — mark a command comment as processed
+  [ -n "${1:-}" ] || return 0
+  gh api -X POST "repos/${REPO}/issues/comments/$1/reactions" -f content=eyes --silent || true
+}
+
 expiry() { date -u -d "+${LEASE_TTL_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ; }
 
 paths_to_json() { # stdin: comma-separated paths -> compact JSON array (safe on empty input)
@@ -119,6 +128,25 @@ overlap_warning() { # overlap_warning <actor> <pathsJson> -> prints colliding "a
     state/leases.json
 }
 
+# --------------------------------------------- Projects v2 (experimental, optional)
+# Requires a PAT/App token with `project` scope — GITHUB_TOKEN cannot touch Projects v2.
+project_move() { # project_move <issue#> <status-option-name>
+  [ -n "${PROJECT_NUMBER:-}" ] && [ -n "${PROJECT_TOKEN:-}" ] || return 0
+  local owner="${PROJECT_OWNER:-${REPO%%/*}}" url="https://github.com/${REPO}/issues/$1"
+  local pjson item_id project_id field_id opt_id
+  GH_TOKEN="$PROJECT_TOKEN" gh project item-add "$PROJECT_NUMBER" --owner "$owner" --url "$url" >/dev/null 2>&1 || true
+  project_id="$(GH_TOKEN="$PROJECT_TOKEN" gh project view "$PROJECT_NUMBER" --owner "$owner" --format json 2>/dev/null | jq -r .id)" || return 0
+  item_id="$(GH_TOKEN="$PROJECT_TOKEN" gh project item-list "$PROJECT_NUMBER" --owner "$owner" --format json --limit 200 2>/dev/null \
+            | jq -r --arg u "$url" '.items[] | select(.content.url == $u) | .id' | head -1)"
+  [ -n "$item_id" ] || return 0
+  pjson="$(GH_TOKEN="$PROJECT_TOKEN" gh project field-list "$PROJECT_NUMBER" --owner "$owner" --format json 2>/dev/null)"
+  field_id="$(echo "$pjson" | jq -r '.fields[] | select(.name == "Status") | .id')"
+  opt_id="$(echo "$pjson" | jq -r --arg s "$2" '.fields[] | select(.name == "Status") | .options[]? | select(.name == $s) | .id' | head -1)"
+  [ -n "$field_id" ] && [ -n "$opt_id" ] || return 0
+  GH_TOKEN="$PROJECT_TOKEN" gh project item-edit --id "$item_id" --project-id "$project_id" \
+    --field-id "$field_id" --single-select-option-id "$opt_id" >/dev/null 2>&1 || true
+}
+
 # ---------------------------------------------------------------- commands
 cmd_claim() { # <actor> <type> <issue> <pathsJson>
   local actor="$1" type="$2" issue="$3" paths="$4"
@@ -136,6 +164,7 @@ cmd_claim() { # <actor> <type> <issue> <pathsJson>
   drop_lease "$actor"                      # one lease per actor: replace
   add_lease "$actor" "$type" "$issue" "$branch" "$paths"
   touch_activity "$actor" "$type" "$issue" "$branch" "claim"
+  project_move "$issue" "In Progress"
   local warn body
   warn="$(overlap_warning "$actor" "$paths" || true)"
   body="🗼 **Claimed by @${actor}** — lease acquired ($(echo "$paths" | jq -r 'join(", ") | if .=="" then "no paths declared" else . end'), TTL ${LEASE_TTL_MIN}m).
@@ -154,6 +183,7 @@ cmd_release() { # <actor> <issue> <note>
     '.actors[$a].task = null | .actors[$a].branch = null | .actors[$a].last_seen = $now' \
     state/activity.json > state/activity.json.tmp && mv state/activity.json.tmp state/activity.json
   gh api -X DELETE "repos/${REPO}/issues/$2/assignees" -f "assignees[]=$1" --silent || true
+  project_move "$2" "Ready"
   comment "$2" "🗼 Released by @$1. ${3:-"(no context note left — next claimant starts cold)"}"
 }
 
@@ -169,6 +199,28 @@ cmd_status() { # <issue>
   comment "$1" "$(cat STATUS.md)"
 }
 
+# process_command <verb> <args> <actor> <type> <issue> [comment_id]
+process_command() {
+  local VERB="$1" ARGS="$2" ACTOR="$3" TYPE="$4" ISSUE="$5" CID="${6:-}"
+  case "$VERB" in
+    /claim)
+      local PATHS
+      PATHS="$(echo "$ARGS" | paths_to_json)"
+      [ "$PATHS" = "[]" ] && PATHS="$(issue_paths "$ISSUE")"
+      cmd_claim "$ACTOR" "$TYPE" "$ISSUE" "$PATHS" ;;
+    /release)  cmd_release "$ACTOR" "$ISSUE" "$ARGS" ;;
+    /heartbeat) cmd_heartbeat "$ACTOR" "$TYPE" "$ISSUE" ;;
+    /handoff)
+      cmd_release "$ACTOR" "$ISSUE" "handing off"
+      comment "$ISSUE" "🗼 @${ACTOR} hands this off to ${ARGS} — please \`/claim\` to accept." ;;
+    /status)   cmd_status "$ISSUE" ;;
+    /ack)      cmd_heartbeat "$ACTOR" "$TYPE" "$ISSUE" ;;
+    *) log "not a tower command: $VERB"; return 0 ;;
+  esac
+  react "$CID"
+}
+
+# ---------------------------------------------------------------- reap + sweep
 reap() {
   # expired leases → notify + drop
   jq -c --arg now "$NOW" '.leases[] | select(.expires_at < $now)' state/leases.json |
@@ -195,12 +247,38 @@ reap() {
   done
 }
 
+sweep() {
+  # Replay recent command comments that never got the 👀 processed-marker.
+  # Heals commands dropped by concurrency-group cancellation. Replays run in
+  # comment order; commands are idempotent, so replay converges.
+  local since
+  since="$(date -u -d "-${SWEEP_WINDOW_MIN:-360} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+  gh api "repos/${REPO}/issues/comments?since=${since}&per_page=100" --paginate --jq '
+    .[] | select(.body | test("^/(claim|release|heartbeat|handoff|status|ack)([ \\r\\n]|$)"))
+        | select(.reactions.eyes == 0)
+        | {id: .id, first: (.body | split("\n")[0] | rtrimstr("\r")),
+           actor: .user.login, utype: .user.type,
+           issue: (.issue_url | split("/") | last)}' |
+  jq -c . 2>/dev/null | while read -r c; do
+    local verb args actor type issue cid
+    verb="$(echo "$c" | jq -r '.first' | awk '{print $1}')"
+    args="$(echo "$c" | jq -r '.first' | cut -s -d' ' -f2-)"
+    actor="$(echo "$c" | jq -r '.actor')"
+    type="human"; [ "$(echo "$c" | jq -r '.utype')" = "Bot" ] && type="agent"
+    issue="$(echo "$c" | jq -r '.issue')"
+    cid="$(echo "$c" | jq -r '.id')"
+    log "sweeper replaying dropped command: $verb by $actor on #$issue"
+    process_command "$verb" "$args" "$actor" "$type" "$issue" "$cid"
+  done
+}
+
 # ---------------------------------------------------------------- entrypoint
 clone_state
 
 if [ "$MODE" = "reap" ]; then
   reap
-  commit_state "reap @ ${NOW}"
+  sweep
+  commit_state "reap+sweep @ ${NOW}"
   exit 0
 fi
 
@@ -210,24 +288,12 @@ if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
   ACTOR="$(jq -r '.comment.user.login' "$EVENT")"
   UTYPE="$(jq -r '.comment.user.type' "$EVENT")"
   ISSUE="$(jq -r '.issue.number' "$EVENT")"
+  CID="$(jq -r '.comment.id' "$EVENT")"
   TYPE="human"; [ "$UTYPE" = "Bot" ] && TYPE="agent"
   FIRST="$(echo "$BODY" | head -n1 | tr -d '\r')"
   VERB="$(echo "$FIRST" | awk '{print $1}')"
   ARGS="$(echo "$FIRST" | cut -s -d' ' -f2-)"
-  case "$VERB" in
-    /claim)
-      PATHS="$(echo "$ARGS" | paths_to_json)"
-      [ "$PATHS" = "[]" ] && PATHS="$(issue_paths "$ISSUE")"
-      cmd_claim "$ACTOR" "$TYPE" "$ISSUE" "$PATHS" ;;
-    /release)  cmd_release "$ACTOR" "$ISSUE" "$ARGS" ;;
-    /heartbeat) cmd_heartbeat "$ACTOR" "$TYPE" "$ISSUE" ;;
-    /handoff)
-      cmd_release "$ACTOR" "$ISSUE" "handing off"
-      comment "$ISSUE" "🗼 @${ACTOR} hands this off to ${ARGS} — please \`/claim\` to accept." ;;
-    /status)   cmd_status "$ISSUE" ;;
-    /ack)      cmd_heartbeat "$ACTOR" "$TYPE" "$ISSUE" ;;
-    *) log "not a tower command: $VERB"; exit 0 ;;
-  esac
+  process_command "$VERB" "$ARGS" "$ACTOR" "$TYPE" "$ISSUE" "$CID"
   commit_state "${VERB#/} by ${ACTOR} on #${ISSUE}"
 elif [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
   # strictness: reject payloads that don't match schemas/command.schema.json shape

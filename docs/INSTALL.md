@@ -70,6 +70,8 @@ Full spec: https://github.com/isobed18/gh-tower/blob/main/docs/PROTOCOL.md
 | `agent-branch-prefixes` | `codex/,claude/,agent/,copilot/` | how self-heal recognizes agent PRs |
 | `fix-mention` | `@codex` | who gets asked to fix agent PRs |
 | `max-heal-attempts` | `3` | envelope retry budget per PR |
+| `sweep-window-minutes` | `360` | how far back the reaper's sweeper replays unacknowledged (no-👀) commands |
+| `project-number` / `project-owner` / `project-token` | unset | EXPERIMENTAL: move Projects v2 cards to *In Progress* / *Ready* on claim/release. Needs a PAT with `project` scope — `GITHUB_TOKEN` cannot access Projects v2. |
 
 ## 7. Kill switch
 
